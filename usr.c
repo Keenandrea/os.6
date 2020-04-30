@@ -32,6 +32,7 @@ shmem* smseg;
 int sipcid;
 int tousr;
 int tooss;
+int lastval;
 /* END ================================================================= */
 
 
@@ -65,6 +66,7 @@ int main(int argc, char *argv[])
 	int iter;
 	int count = 0;
 	int proc = atoi(argv[1]);
+	int sche = atoi(argv[2]);
 
     /* time(NULL) ensures a different val
        ue every second. (getpid() << 16))
@@ -81,13 +83,20 @@ int main(int argc, char *argv[])
 
 	worktime.secs = smseg->smtime.secs;
 	worktime.nans = smseg->smtime.nans;
+
+	sem_wait(&(smseg->clocksem));
 	clockinc(&worktime, 0, interim);
+	sem_post(&(smseg->clocksem));
 
 	int doiterminate = (rand() % (250 * bound) + 1);
 	
 	termtime.secs = smseg->smtime.secs;
 	termtime.nans = smseg->smtime.nans;
+
+	sem_wait(&(smseg->clocksem));
 	clockinc(&termtime, 0, doiterminate);
+	sem_post(&(smseg->clocksem));
+
 
 	while(1)
 	{
@@ -95,51 +104,62 @@ int main(int argc, char *argv[])
 		{
 			worktime.secs = smseg->smtime.secs;
 			worktime.nans = smseg->smtime.nans;
+
+			sem_wait(&(smseg->clocksem));
 			clockinc(&worktime, 0, interim);
+			sem_post(&(smseg->clocksem));
 
-			if((rand() % 100) < probthatprocrequests)
-			{
-				count++;
-
-				strcpy(msg.message, "REQUEST");
-				msg.msgtype = proc;
-				msgsnd(tooss, &msg, sizeof(msg), 0);
-
-				int req = (rand() % 32);
-
-				sprintf(msg.message, "%i", req);
-				msgsnd(tooss, &msg, sizeof(msg), 0);
-
-				while(1)
+			// if(sche == 0)
+			// {
+				if((rand() % 100) < probthatprocrequests)
 				{
-					msgrcv(tousr, &msg, sizeof(msg), proc, 0);
+					count++;
+
+					strcpy(msg.message, "REQUEST");
+					msg.msgtype = proc;
+					msgsnd(tooss, &msg, sizeof(msg), 0);
+
+					int req = (rand() % 32);
+
+					sprintf(msg.message, "%i", req);
+					msgsnd(tooss, &msg, sizeof(msg), 0);
+
+					while(1)
+					{
+						msgrcv(tousr, &msg, sizeof(msg), proc, 0);
+						
+						if(strcmp(msg.message, "GRANTED READ REQ") == 0)
+						{
+							break;
+						}
+					}
+				} else {
+
+					count++;
+					strcpy(msg.message, "WRITE");
+					msg.msgtype = proc;
+					msgsnd(tooss, &msg, sizeof(msg), 0);
+
+					int writeres = rand() % 32; 
 					
-					if(strcmp(msg.message, "GRANTEDREAD") == 0)
+					sprintf(msg.message, "%i", writeres);
+					msgsnd(tooss, &msg, sizeof(msg), 0);
+
+					while(1)
 					{
-						break;
+						msgrcv(tousr, &msg, sizeof(msg), proc, 0);
+						if(strcmp(msg.message, "GRANTED WRITE REQ") == 0)
+						{
+							break;
+						}
 					}
 				}
-			} else {
+			// }
 
-				count++;
-				strcpy(msg.message, "WRITE");
-				msg.msgtype = proc;
-				msgsnd(tooss, &msg, sizeof(msg), 0);
-
-				int writeres = rand() % 32; 
+			// if(sche == 1)
+			// {
 				
-				sprintf(msg.message, "%i", writeres);
-				msgsnd(tooss, &msg, sizeof(msg), 0);
-
-				while(1)
-				{
-					msgrcv(tousr, &msg, sizeof(msg), proc, 0);
-					if(strcmp(msg.message, "GRANTEDWRITE") == 0)
-					{
-						break;
-					}
-				}
-			}
+			// }
 		}
 
 		if(((count % 100) == 0)	&& count != 0)

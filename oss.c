@@ -48,7 +48,7 @@ struct page
 {
 	int frame;
 	int swaps;
-
+	float weight;
 };
 
 struct pagetable
@@ -77,7 +77,7 @@ int sipcid;
 int tooss;
 int tousr;
 int plist[PCAP];
-int memreq;
+int scheme;
 int pagefaults;
 int reqcount;
 int lcount = 0;
@@ -110,6 +110,7 @@ void killtime(int, siginfo_t *, void *);
 void shminit();
 void msginit();
 void tabinit();
+void arrinit();
 void manager();
 void moppingup();
 
@@ -151,6 +152,11 @@ int main(int argc, char *argv[])
 	shminit();
 	msginit();
 	tabinit();
+
+	if(scheme == 1)
+	{
+		arrinit();
+	}
 
 	sem_wait(&(smseg->clocksem));
 	smseg->smtime.secs = 0;
@@ -264,7 +270,7 @@ void manager()
 				if(lcount < 100000)
 				{
 					lcount++;
-					fprintf(outlog, "\n[oss]: [write request]     -> [pid: %i] requesting write of [address: %i] at [time: %is:%ins]", proc, writer, smseg->smtime.secs, smseg->smtime.nans);
+					fprintf(outlog, "\n[oss]: [write request]     -> [pid: %i] requesting write of address [0x%-5x] at [time: %is:%ins]", proc, writer * 1000, smseg->smtime.secs, smseg->smtime.nans);
 				}
 
 				if(mem.pagetableinstance[proc - 1].frames[writer].frame == -1)
@@ -272,7 +278,7 @@ void manager()
 					if(lcount < 100000)
 					{
 						lcount++;
-						fprintf(outlog, "\n[oss]: [page fault]     -> [address: %i] is not in a frame, at [time: %is:%ins]", writer, smseg->smtime.secs, smseg->smtime.nans);
+						fprintf(outlog, "\n[oss]: [page fault]     -> address [0x%-5x] is not in a frame, at [time: %is:%ins]", writer * 1000, smseg->smtime.secs, smseg->smtime.nans);
 					}	
 
 					pagefaults++;
@@ -297,7 +303,7 @@ void manager()
 				if(lcount < 100000)
 				{
 					lcount++;
-					fprintf(outlog, "\n[oss]: [read request]     ->  [pid: %i] requesting read of [address: %i] at [time: %is:%ins]", proc, pageid, smseg->smtime.secs, smseg->smtime.nans);
+					fprintf(outlog, "\n[oss]: [read request]     ->  [pid: %i] requesting read of address [0x%-5x] at [time: %is:%ins]", proc, pageid * 1000, smseg->smtime.secs, smseg->smtime.nans);
 				}	
 
 				if(mem.pagetableinstance[proc - 1].frames[pageid].frame == -1)
@@ -305,7 +311,7 @@ void manager()
 					if(lcount < 100000)
 					{
 						lcount++;
-						fprintf(outlog, "\n[oss]: [page fault]     -> [address: %i] is not in a frame, at [time: %is:%ins]", pageid, smseg->smtime.secs, smseg->smtime.nans);
+						fprintf(outlog, "\n[oss]: [page fault]     -> address [0x%-5x] is not in a frame, at [time: %is:%ins]", pageid * 1000, smseg->smtime.secs, smseg->smtime.nans);
 					}
 
 					pagefaults++;
@@ -331,7 +337,7 @@ void manager()
 						fprintf(outlog, "\n[oss]: [read request]    -> [pid: %i] granted for read at [time: %is:%ins]", proc, smseg->smtime.secs, smseg->smtime.nans);				
 					}
 					
-					strcpy(msg.message,"GRANTEDREAD");
+					strcpy(msg.message,"GRANTED READ REQ");
 					msg.msgtype = proc;
 
 					sem_wait(&(smseg->clocksem));
@@ -350,7 +356,7 @@ void manager()
 					if(lcount < 100000)
 					{
 						lcount++;
-						fprintf(outlog, "\n[oss]: [page fault]     -> [address: %i] is not in a frame, at [time: %is:%ins]", pageid, smseg->smtime.secs, smseg->smtime.nans);
+						fprintf(outlog, "\n[oss]: [page fault]     -> address [0x%-5x] is not in a frame, at [time: %is:%ins]", pageid * 1000, smseg->smtime.secs, smseg->smtime.nans);
 					}
 
 					pagefaults++;
@@ -403,13 +409,13 @@ void manager()
 
 						msg.msgtype = proc;
 						
-						strcpy(msg.message,"GRANTEDREAD");
+						strcpy(msg.message,"GRANTED READ REQ");
 						msgsnd(tousr, &msg, sizeof(msg), IPC_NOWAIT);
 						
 						if(lcount < 100000)
 						{
 							lcount++;
-							fprintf(outlog, "\n[oss]: [read request]    -> [pid: %i] granted for [address: %i] read at [time: %is:%ins]", proc, pageid, smseg->smtime.secs, smseg->smtime.nans);
+							fprintf(outlog, "\n[oss]: [read request]    -> [pid: %i] granted for address [0x%-5x] read at [time: %is:%ins]", proc, pageid * 1000, smseg->smtime.secs, smseg->smtime.nans);
 						}
 
 					}
@@ -425,13 +431,13 @@ void manager()
 
 						msg.msgtype = proc;
 						
-						strcpy(msg.message,"GRANTEDWRITE");
+						strcpy(msg.message,"GRANTED WRITE REQ");
 						msgsnd(tousr, &msg, sizeof(msg), IPC_NOWAIT);
 						
 						if(lcount < 100000)
 						{
 							lcount++;
-							fprintf(outlog, "\n[oss]: [write request]    -> [pid: %i] granted for [address: %i] read at [time: %is:%ins]", proc, pageid, smseg->smtime.secs, smseg->smtime.nans);
+							fprintf(outlog, "\n[oss]: [write request]    -> [pid: %i] granted for address [0x%-5x] write at [time: %is:%ins]", proc, pageid * 1000, smseg->smtime.secs, smseg->smtime.nans);
 						}
 					}
 
@@ -510,15 +516,16 @@ void insertpage(int id, int proc)
 /* ===================================================================== */
 void printer()
 {
+
 	if(lcount < 100000)
 	{
-		fprintf(outlog, "\n\nCurrent Memory layout at time [%is:%ins]\n", smseg->smtime.secs, smseg->smtime.nans);
-		fprintf(outlog, "\t     Occupied\tPID\tRefByte\t   DirtyBit\n");
+		fprintf(outlog, "\n\nMemory Layout at [%is:%ins]\n", smseg->smtime.secs, smseg->smtime.nans);
+		fprintf(outlog, "\t     Occupied\t\tAddress\t\tRefByte\t\tDirtyBit\n");
 		lcount = lcount + 2;
 	}
 
 	int i;
-	for(i = 0; i < memsize; i++)
+	for(i = 0; i < memsize / pagesize; i++)
 	{
 		if(lcount < 100000)
 		{	
@@ -526,17 +533,16 @@ void printer()
 			
 			if(mem.frameinstance[i].pid != -1)
 			{
-				fprintf(outlog, "+\t");
+				fprintf(outlog, "yes\t");
 			} else {
-				fprintf(outlog, ".\t");
+				fprintf(outlog, "no\t");
 			}
 
-			fprintf(outlog, "%i\t", mem.frameinstance[i].pid);
-			fprintf(outlog, "%c%c%c%c%c%c%c%c\t", BYTE_TO_BINARY(mem.frameinstance[i].referbit));
-			fprintf(outlog, "%x\t", mem.frameinstance[i].dirtybit);
-			fprintf(outlog, "\n");		
+			fprintf(outlog, "\t[0x%-5x]\t%c%c%c%c%c%c%c%c\t%x", i * 1000, BYTE_TO_BINARY(mem.frameinstance[i].referbit), mem.frameinstance[i].dirtybit);	
 			lcount++;
 		}
+
+		fprintf(outlog, "\n");	
 			
 	}
 
@@ -596,13 +602,15 @@ void moppingup()
 
 /* OVERLAYS PROGRAM IMAGE WITH EXECV =================================== */
 /* ===================================================================== */
-void overlay(int id)
+void overlay(int id, int scheme)
 {
 	char proc[20]; 
+	char schm[10];
 					
-	sprintf(proc, "%i", id);	
+	sprintf(proc, "%i", id);
+	sprintf(schm, "%i", scheme);	
 				
-	char* fargs[] = {"./usr", proc, NULL};
+	char* fargs[] = {"./usr", proc, scheme, NULL};
 	execv(fargs[0], fargs);
 
 	/* oss will not reach here unerred */	
@@ -622,6 +630,22 @@ void clockinc(simclock* khronos, int sec, int nan)
 	{
 		khronos->nans -= 1000000000;
 		(khronos->secs)++;
+	}
+}
+/* END ================================================================= */
+
+
+/* INITIATES ARRAY FOR SCHEME #2 ======================================= */
+/* ===================================================================== */
+void arrinit()
+{
+	float weighted;
+	int i;
+	for(i = 0; i < 32; i++)
+	{
+		weighted = 1 / i;
+		smseg->weightarr[i] = weighted;
+		printf("\nweight at loc %i is %i", i, weighted);
 	}
 }
 /* END ================================================================= */
@@ -649,63 +673,6 @@ void tabinit()
 		}
 	}
 }
-/* END ================================================================= */
-
-
-/*  SEMAPHORE SIGNAL =================================================== */
-/* ===================================================================== */
-// void sem_signal(int semident)
-// {
-// 	struct sembuf sbuf;
-// 	sbuf.sem_num = 0;
-// 	sbuf.sem_op = 1;
-// 	sbuf.sem_flg = 0;
-
-// 	if(semop(semident, &sbuf, 1) == -1)
-// 	{
-// 		exit(EXIT_FAILURE);
-// 	}
-// 	return;
-// }
-/* END ================================================================= */
-
-
-/*  SEMAPHORE WAIT ===================================================== */
-/* ===================================================================== */
-// void sem_wait(int semident)
-// {
-// 	struct sembuf sbuf;
-// 	sbuf.sem_num = 0;
-// 	sbuf.sem_op = -1;
-// 	sbuf.sem_flg = 0;
-
-// 	if(semop(semident, &sbuf, 1) == -1)
-// 	{
-// 		exit(EXIT_SUCCESS);
-// 	}
-// 	return;
-// }
-/* END ================================================================= */
-
-
-/* INITIATES SEMAPHORE ================================================= */
-/* ===================================================================== */
-// void seminit()
-// {
-// 	key_t semkey = ftok(".", 725);
-// 	if(semkey == -1)
-// 	{
-// 		perror("\noss: error: ftok semaphore failed");
-// 		exit(EXIT_FAILURE);
-// 	}
-
-// 	semid = semget(semkey, 1, 0600 | IPC_CREAT);
-// 	if(semid == -1)
-// 	{
-// 		perror("\noss: error: failed to create semaphore");
-// 		exit(EXIT_FAILURE);
-// 	}
-// }
 /* END ================================================================= */
 
 
@@ -875,8 +842,8 @@ void optset(int argc, char *argv[])
 				helpme();
 				exit(EXIT_SUCCESS);
 			case 'm':
-				memreq = atoi(optarg);
-				if(memreq > 1 || memreq < 0)
+				scheme = atoi(optarg);
+				if(scheme > 1 || scheme < 0)
 				{
 					printf("\noss: error: determinant of memory request scheme must be 0 or 1\n");
 					exit(EXIT_FAILURE);

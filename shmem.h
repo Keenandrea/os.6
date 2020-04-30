@@ -25,6 +25,7 @@ typedef struct
     sem_t clocksem;
     info procs[18];
     simclock smtime;
+    float weightarr[32];
 } shmem;
 
 #endif /* SHMEM_H */
