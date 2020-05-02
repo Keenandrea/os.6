@@ -77,7 +77,7 @@ int sipcid;
 int tooss;
 int tousr;
 int plist[PCAP];
-int scheme;
+int scheme = 0;
 int pagefaults;
 int reqcount;
 int lcount = 0;
@@ -116,7 +116,7 @@ void moppingup();
 
 void clockinc(simclock *, int, int);
 
-void overlay(int);
+void overlay(int, int);
 int findaseat();
 void shifter();
 void printer();
@@ -197,7 +197,7 @@ void manager()
 
 	waitingroom = queueinit(200);
 
-	printf("\n[oss]: running simulation\n[oss]: ctrl-c to terminate\n");
+	printf("\n[oss]: running simulation\n[oss]: on memory request scheme %i\n[oss]: ctrl-c to terminate\n", scheme);
 
 	while(1)
 	{
@@ -229,7 +229,7 @@ void manager()
 				pids[seat - 1] = fork();
 				if(pids[seat - 1] == 0)
 				{
-					overlay(seat);
+					overlay(seat, scheme);
 				}
 
 				acount++;
@@ -450,7 +450,16 @@ void manager()
 		}
 	}
 
-	while((tpid = wait(&status)) > 0);				
+	while((tpid = wait(&status)) > 0);	
+
+	float accesspersecond = ((float)(reqcount)/((float)(smseg->smtime.secs)+((float)smseg->smtime.nans/(float)(1000000000))));
+	float faultsperaccess = ((float)(pagefaults)/(float)reqcount);
+	float avgaccessspeeds = (((float)(smseg->smtime.secs)+((float)smseg->smtime.nans/(float)(1000000000)))/((float)reqcount));
+	
+	fprintf(outlog, "\n\n\tStatistics of Interest\n\t---------- -- --------\n");
+	fprintf(outlog, "\tNumber of Memory Accesses Per Second: \t[%f]\n", accesspersecond);	
+	fprintf(outlog, "\tNumber of Page Faults Per Memory Access: \t[%f]\n", faultsperaccess);
+	fprintf(outlog, "\tAverage Memory Access Speed: \t[%f]\n\n", avgaccessspeeds);			
 }
 /* END ================================================================= */
 
@@ -610,7 +619,7 @@ void overlay(int id, int scheme)
 	sprintf(proc, "%i", id);
 	sprintf(schm, "%i", scheme);	
 				
-	char* fargs[] = {"./usr", proc, scheme, NULL};
+	char* fargs[] = {"./usr", proc, schm, NULL};
 	execv(fargs[0], fargs);
 
 	/* oss will not reach here unerred */	
@@ -641,11 +650,10 @@ void arrinit()
 {
 	float weighted;
 	int i;
-	for(i = 0; i < 32; i++)
+	for(i = 1; i <= 32; i++)
 	{
-		weighted = 1 / i;
-		smseg->weightarr[i] = weighted;
-		printf("\nweight at loc %i is %i", i, weighted);
+		weighted = 1 / (float)i;
+		smseg->weightarr[i - 1] = weighted;
 	}
 }
 /* END ================================================================= */
@@ -755,6 +763,15 @@ void killtime(int sig, siginfo_t *sainfo, void *ptr)
 
 	write(STDERR_FILENO, msgtime, msglentime);
 
+	float accesspersecond = ((float)(reqcount)/((float)(smseg->smtime.secs)+((float)smseg->smtime.nans/(float)(1000000000))));
+	float faultsperaccess = ((float)(pagefaults)/(float)reqcount);
+	float avgaccessspeeds = (((float)(smseg->smtime.secs)+((float)smseg->smtime.nans/(float)(1000000000)))/((float)reqcount));
+	
+	fprintf(outlog, "\n\n\tStatistics of Interest\n\t---------- -- --------\n");
+	fprintf(outlog, "\tNumber of Memory Accesses Per Second: \t[%f]\n", accesspersecond);	
+	fprintf(outlog, "\tNumber of Page Faults Per Memory Access: \t[%f]\n", faultsperaccess);
+	fprintf(outlog, "\tAverage Memory Access Speed: \t[%f]\n\n", avgaccessspeeds);
+
 	// int i;
 	// for(i = 0; i < PCAP; i++)
 	// {
@@ -788,6 +805,15 @@ void killctrl(int sig, siginfo_t *sainfo, void *ptr)
 	int msglenctrl = sizeof(msgctrl);
 
 	write(STDERR_FILENO, msgctrl, msglenctrl);
+
+	float accesspersecond = ((float)(reqcount)/((float)(smseg->smtime.secs)+((float)smseg->smtime.nans/(float)(1000000000))));
+	float faultsperaccess = ((float)(pagefaults)/(float)reqcount);
+	float avgaccessspeeds = (((float)(smseg->smtime.secs)+((float)smseg->smtime.nans/(float)(1000000000)))/((float)reqcount));
+	
+	fprintf(outlog, "\n\n\tStatistics of Interest\n\t---------- -- --------\n");
+	fprintf(outlog, "\tNumber of Memory Accesses Per Second: \t[%f]\n", accesspersecond);	
+	fprintf(outlog, "\tNumber of Page Faults Per Memory Access: \t[%f]\n", faultsperaccess);
+	fprintf(outlog, "\tAverage Memory Access Speed: \t[%f]\n\n", avgaccessspeeds);
 
 	// int i;
 	// for(i = 0; i < PCAP; i++)

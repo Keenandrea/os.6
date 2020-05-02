@@ -32,7 +32,9 @@ shmem* smseg;
 int sipcid;
 int tousr;
 int tooss;
-int lastval;
+float reqpage;
+float randbound;
+float memaddr;
 /* END ================================================================= */
 
 
@@ -51,6 +53,7 @@ struct
 void sminit();
 void msginit();
 void clockinc(simclock *, int, int);
+void addarray();
 /* END ================================================================= */
 
 
@@ -60,7 +63,6 @@ int main(int argc, char *argv[])
 {
 
     sminit();
-
     msginit();
 
 	int iter;
@@ -109,8 +111,8 @@ int main(int argc, char *argv[])
 			clockinc(&worktime, 0, interim);
 			sem_post(&(smseg->clocksem));
 
-			// if(sche == 0)
-			// {
+			if(sche == 0)
+			{
 				if((rand() % 100) < probthatprocrequests)
 				{
 					count++;
@@ -154,12 +156,68 @@ int main(int argc, char *argv[])
 						}
 					}
 				}
-			// }
+			}
 
-			// if(sche == 1)
-			// {
-				
-			// }
+			if(sche == 1)
+			{
+				addarray();	
+				int randnum = (rand() % (int)randbound + 1);
+				int k;
+				for(k = 0; k < 32; k++)
+				{
+					if(smseg->weightarr[k] > randnum)
+					{
+						reqpage = smseg->weightarr[k];
+						break;
+					}
+				}
+
+				float multiplied = reqpage * 1024;
+				float randoffset = rand() % 1023;
+				memaddr = multiplied + randoffset;  
+
+				if((rand() % 100) < probthatprocrequests)
+				{
+					count++;
+
+					strcpy(msg.message, "REQUEST");
+					msg.msgtype = proc;
+					msgsnd(tooss, &msg, sizeof(msg), 0);
+
+
+					sprintf(msg.message, "%i", memaddr);
+					msgsnd(tooss, &msg, sizeof(msg), 0);
+
+					while(1)
+					{
+						msgrcv(tousr, &msg, sizeof(msg), proc, 0);
+						
+						if(strcmp(msg.message, "GRANTED READ REQ") == 0)
+						{
+							break;
+						}
+					}
+				} else {
+
+					count++;
+					strcpy(msg.message, "WRITE");
+					msg.msgtype = proc;
+					msgsnd(tooss, &msg, sizeof(msg), 0);
+					
+					sprintf(msg.message, "%i", memaddr);
+					msgsnd(tooss, &msg, sizeof(msg), 0);
+
+					while(1)
+					{
+						msgrcv(tousr, &msg, sizeof(msg), proc, 0);
+						if(strcmp(msg.message, "GRANTED WRITE REQ") == 0)
+						{
+							break;
+						}
+					}
+				}
+
+			}
 		}
 
 		if(((count % 100) == 0)	&& count != 0)
@@ -223,6 +281,20 @@ void msginit()
 		perror("\noss: error: failed to create");
 		exit(EXIT_FAILURE);
 	}
+}
+/* END ================================================================= */
+
+
+/* INITIATES SHARED MEMORY ============================================= */
+/* ===================================================================== */
+void addarray()
+{
+	int i;
+	for(i = 0; i < 31; i++)
+	{
+		smseg->weightarr[i + 1] = smseg->weightarr[i] + smseg->weightarr[i + 1];
+	}
+	randbound = smseg->weightarr[i];
 }
 /* END ================================================================= */
 
